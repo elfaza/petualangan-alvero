@@ -20,7 +20,9 @@ void main() {
     expect(find.byKey(const ValueKey('mission-scene')), findsOneWidget);
     expect(find.byKey(const ValueKey('mission-prop')), findsOneWidget);
     expect(
-      find.text('Alvero mau piknik, tapi bekalnya belum lengkap. Bantu aku, ya!'),
+      find.text(
+        'Alvero mau piknik, tapi bekalnya belum lengkap. Bantu aku, ya!',
+      ),
       findsOneWidget,
     );
     expect(find.text('Siapkan 5 apel untuk bekal!'), findsOneWidget);
