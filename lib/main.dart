@@ -1,9 +1,13 @@
+import 'dart:async';
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
-enum _Difficulty { pemula, menengah }
+import 'audio/game_audio_policy.dart';
+import 'game/learning_mission.dart';
+import 'game/skill_progress.dart';
 
 void main() => runApp(const PetualanganAlveroApp());
 
@@ -35,125 +39,34 @@ class AlveroGamePage extends StatefulWidget {
 }
 
 class _AlveroGamePageState extends State<AlveroGamePage>
-    with TickerProviderStateMixin {
-  static const _beginnerRounds = <(int, int)>[
-    (1, 2),
-    (2, 2),
-    (3, 2),
-    (2, 3),
-    (4, 1),
-  ];
-  static const _intermediateRounds = <(int, int)>[
-    (2, 3),
-    (4, 2),
-    (3, 4),
-    (5, 3),
-    (6, 2),
-  ];
-  static const _missionTitles = <String>[
-    'Bekal piknik',
-    'Sarapan kelinci',
-    'Pai apel',
-    'Gerobak buah',
-    'Kejutan untuk Alvero',
-  ];
-  static const _missionDescriptions = <String>[
-    'Siapkan buah untuk piknik di taman.',
-    'Bantu Alvero memberi makan kelinci.',
-    'Kumpulkan apel untuk membuat pai.',
-    'Isi gerobak buah sampai penuh.',
-    'Siapkan apel untuk pesta kecil Alvero.',
-  ];
-  static const _missionStories = <String>[
-    'Alvero mau piknik, tapi bekalnya belum lengkap. Bantu aku, ya!',
-    'Teman kelinci lapar. Yuk, siapkan sarapan bersama Alvero!',
-    'Pai apel Alvero belum jadi. Ia kehabisan buah!',
-    'Gerobak buahnya kosong. Bantu Alvero mengisinya!',
-    'Alvero mau berbagi apel di pesta. Bantu dia, yuk!',
-  ];
-  static const _missionGoalItems = <String>[
-    'apel untuk bekal',
-    'wortel untuk kelinci',
-    'apel untuk pai',
-    'buah untuk gerobak',
-    'hiasan untuk pesta',
-  ];
-  static const _collectionInstructions = <String>[
-    'Masukkan',
-    'Berikan',
-    'Masukkan',
-    'Masukkan',
-    'Pasang',
-  ];
-  static const _collectionPhrases = <String>[
-    'apel ke bekal',
-    'wortel kepada kelinci',
-    'apel ke adonan pai',
-    'buah ke gerobak',
-    'hiasan untuk pesta',
-  ];
-  static const _collectionLabels = <String>[
-    'apel',
-    'wortel',
-    'apel',
-    'buah',
-    'hiasan',
-  ];
-  static const _collectionButtonLabels = <String>[
-    'ISI BEKAL!',
-    'BERI MAKAN KELINCI!',
-    'TAMBAHKAN KE PAI!',
-    'ISI GEROBAK!',
-    'HIAS PESTA!',
-  ];
-  static const _collectionDestinationLabels = <String>[
-    'KERANJANG BEKAL',
-    'TEMAN KELINCI',
-    'ADONAN PAI',
-    'GEROBAK BUAH',
-    'PESTA ALVERO',
-  ];
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   static const _collectionDestinationIcons = <IconData>[
     Icons.shopping_basket_rounded,
     Icons.cruelty_free_rounded,
     Icons.bakery_dining_rounded,
-    Icons.shopping_cart_rounded,
-    Icons.celebration_rounded,
-  ];
-  static const _missionResults = <String>[
-    'Bekal piknik siap! Teman-teman Alvero siap berangkat!',
-    'Kelinci-kelinci sudah kenyang dan senang!',
-    'Pai apel hangat siap dinikmati bersama!',
-    'Gerobak buah kini penuh dan siap berjualan!',
-    'Kejutan apel siap! Pesta Alvero dimulai!',
+    Icons.cruelty_free_rounded,
+    Icons.bakery_dining_rounded,
   ];
   static const _resultCompanionIcons = <IconData>[
     Icons.park_rounded,
-    Icons.cruelty_free_rounded,
-    Icons.local_cafe_rounded,
-    Icons.storefront_rounded,
-    Icons.celebration_rounded,
-  ];
-  static const _missionActions = <String>[
-    'Menyiapkan bekal',
-    'Menyapa kelinci',
-    'Membuat pai',
-    'Mengisi gerobak',
-    'Menyiapkan pesta',
-  ];
-  static const _missionIcons = <IconData>[
-    Icons.lunch_dining_rounded,
+    Icons.local_florist_rounded,
+    Icons.shopping_basket_rounded,
     Icons.cruelty_free_rounded,
     Icons.bakery_dining_rounded,
-    Icons.shopping_cart_rounded,
-    Icons.card_giftcard_rounded,
+  ];
+  static const _missionIcons = <IconData>[
+    Icons.text_fields_rounded,
+    Icons.palette_rounded,
+    Icons.pattern_rounded,
+    Icons.cruelty_free_rounded,
+    Icons.bakery_dining_rounded,
   ];
   static const _journeyStops = <String>[
-    'Kebun',
+    'Kebun huruf',
+    'Taman warna',
+    'Jalur pola',
     'Padang kelinci',
     'Dapur pai',
-    'Pasar buah',
-    'Pesta Alvero',
   ];
   static const _journeyColors = <Color>[
     Color(0xFF9CDB6B),
@@ -165,9 +78,13 @@ class _AlveroGamePageState extends State<AlveroGamePage>
   static const _green = Color(0xFF35B66A);
   static const _ink = Color(0xFF243B35);
   int _round = 0;
+  int _questionIndex = 0;
   int _picked = 0;
   int _stars = 0;
-  _Difficulty _difficulty = _Difficulty.menengah;
+  int _wrongAttempts = 0;
+  bool _hasUsedHint = false;
+  bool _usedHintInMission = false;
+  final Map<String, SkillProgress> _skillProgress = {};
   bool _showSplash = true;
   bool _showMap = false;
   bool _showMissionIntro = false;
@@ -176,11 +93,19 @@ class _AlveroGamePageState extends State<AlveroGamePage>
   bool _readyNext = false;
   bool _finished = false;
   String _answerFeedback = '';
-  bool _soundEnabled = false;
+  bool _soundEnabled = true;
   AudioPlayer? _musicPlayer;
   AudioPlayer? _effectsPlayer;
+  String _musicAsset = 'audio/alvero_music.wav';
+  String? _loadedMusicAsset;
+  bool _musicPlaying = false;
+  bool _appInBackground = false;
+  final Queue<String> _effectQueue = Queue<String>();
+  bool _effectInProgress = false;
+  late Future<void> _effectsAudioReady;
   final math.Random _answerRandom = math.Random();
-  List<int> _shuffledAnswerOptions = [];
+  final ScrollController _mapScrollController = ScrollController();
+  List<String> _shuffledAnswerOptions = [];
   int _previousCorrectAnswerSlot = -1;
   late final AnimationController _bounce = AnimationController(
     vsync: this,
@@ -193,61 +118,106 @@ class _AlveroGamePageState extends State<AlveroGamePage>
     duration: const Duration(milliseconds: 1100),
   );
 
-  List<(int, int)> get _rounds =>
-      _difficulty == _Difficulty.pemula ? _beginnerRounds : _intermediateRounds;
+  List<LearningMission> get _missions => LearningMission.catalog;
+  LearningMission get _mission => _missions[_round];
+  LearningQuestion get _question => _mission.questions[_questionIndex];
+  int get _target => _mission.collectionCount ?? 0;
+  List<String> get _answerOptions => _shuffledAnswerOptions;
+  bool get _collectingItems =>
+      _mission.usesObjectCollection &&
+      _questionIndex == _mission.questions.length - 1 &&
+      _answerSelected &&
+      !_readyNext;
+  String get _completionFeedback =>
+      switch (_skillProgress[_mission.id]?.status) {
+        SkillStatus.independent => 'Kamu menemukannya sendiri!',
+        SkillStatus.completedWithHelp =>
+          'Kamu berhasil dengan petunjuk Alvero!',
+        _ => 'Kamu terus mencoba. Hebat!',
+      };
 
-  int get _target => _rounds[_round].$1 + _rounds[_round].$2;
-  List<int> get _answerOptions => _shuffledAnswerOptions;
-  String get _collectionItemsPrompt => switch (_round) {
-    1 => 'Berikan wortel',
-    2 => 'Tambahkan apel',
-    3 => 'Masukkan buah',
-    4 => 'Pasang hiasan',
-    _ => 'Ambil apel',
-  };
-
-  int get _activeStop => math.min(_stars, _journeyStops.length - 1);
+  int get _activeStop => math.min(
+    _stars ~/ (_missions.length ~/ _journeyStops.length),
+    _journeyStops.length - 1,
+  );
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _mapFloat.repeat(reverse: true);
     if (widget.audioEnabled) {
       _musicPlayer = AudioPlayer();
       _effectsPlayer = AudioPlayer();
+      _effectsAudioReady = _effectsPlayer!.setAudioContext(
+        createAlveroEffectsAudioContext(),
+      );
+      unawaited(_startMusic());
     }
     _refreshAnswerOptions();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _appInBackground = false;
+      if (_effectInProgress) {
+        unawaited(_effectsPlayer?.resume());
+      } else if (_soundEnabled) {
+        unawaited(_startMusic());
+      }
+      return;
+    }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _appInBackground = true;
+      _musicPlaying = false;
+      unawaited(_musicPlayer?.pause());
+      unawaited(_effectsPlayer?.pause());
+    }
+  }
+
   void _refreshAnswerOptions() {
-    final options = [_target - 1, _target, _target + 1]..shuffle(_answerRandom);
-    var correctSlot = options.indexOf(_target);
+    final options = [..._question.choices]..shuffle(_answerRandom);
+    var correctSlot = options.indexOf(_question.correctAnswer);
     if (_previousCorrectAnswerSlot >= 0 &&
         correctSlot == _previousCorrectAnswerSlot) {
       final nextSlot =
           (correctSlot + 1 + _answerRandom.nextInt(options.length - 1)) %
           options.length;
       options[correctSlot] = options[nextSlot];
-      options[nextSlot] = _target;
+      options[nextSlot] = _question.correctAnswer;
       correctSlot = nextSlot;
     }
     _previousCorrectAnswerSlot = correctSlot;
     _shuffledAnswerOptions = options;
   }
 
-  void _startAdventure() => setState(() {
-    _showSplash = false;
-    _showMap = true;
-    _showMissionIntro = false;
-  });
+  void _startAdventure() {
+    _playEffect('audio/ui_tap.wav');
+    _setMusicTrack('audio/alvero_music.wav');
+    setState(() {
+      _showSplash = false;
+      _showMap = true;
+      _showMissionIntro = false;
+    });
+  }
 
   void _enterMapLevel(int level) {
-    if (level != _stars || _stars >= _rounds.length) return;
+    if (level != _stars || _stars >= _missions.length) return;
+    _playEffect('audio/ui_tap.wav');
+    _setMusicTrack('audio/alvero_music.wav');
     final isNewRound = _round != level;
     setState(() {
       if (isNewRound) {
         _round = level;
+        _questionIndex = 0;
         _picked = 0;
+        _wrongAttempts = 0;
+        _hasUsedHint = false;
+        _usedHintInMission = false;
         _answerSelected = false;
         _readyNext = false;
         _answerFeedback = '';
@@ -263,32 +233,36 @@ class _AlveroGamePageState extends State<AlveroGamePage>
   }
 
   void _startMission() {
+    _playEffect('audio/ui_tap.wav');
+    _setMusicTrack('audio/alvero_mission_music.wav');
     setState(() => _showMissionIntro = false);
     _bounce.forward(from: .86).then((_) => _bounce.reverse());
   }
 
   void _returnToMap() {
+    _playEffect('audio/ui_tap.wav');
+    _setMusicTrack('audio/alvero_music.wav');
     _mapFloat.repeat(reverse: true);
     setState(() {
       _showMap = true;
       _showMissionIntro = false;
       _showMissionComplete = false;
     });
+    _scrollToActiveLevel();
   }
 
-  void _selectDifficulty(_Difficulty difficulty) {
-    if (_difficulty == difficulty) return;
-    setState(() {
-      _difficulty = difficulty;
-      _round = 0;
-      _picked = 0;
-      _stars = 0;
-      _answerSelected = false;
-      _readyNext = false;
-      _finished = false;
-      _answerFeedback = '';
+  void _scrollToActiveLevel() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_mapScrollController.hasClients) return;
+      final target = (_stars * 98.0)
+          .clamp(0.0, _mapScrollController.position.maxScrollExtent)
+          .toDouble();
+      _mapScrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeInOut,
+      );
     });
-    _refreshAnswerOptions();
   }
 
   Future<void> _toggleSound() async {
@@ -296,28 +270,101 @@ class _AlveroGamePageState extends State<AlveroGamePage>
     setState(() => _soundEnabled = enabled);
     if (!widget.audioEnabled) return;
     if (enabled) {
-      await _musicPlayer!.setReleaseMode(ReleaseMode.loop);
-      await _musicPlayer!.setVolume(.17);
-      await _musicPlayer!.play(AssetSource('audio/alvero_music.wav'));
+      _playEffect('audio/ui_tap.wav');
+      await _startMusic();
     } else {
+      _effectQueue.clear();
+      _musicPlaying = false;
+      await _effectsPlayer!.stop();
       await _musicPlayer!.stop();
+    }
+  }
+
+  void _setMusicTrack(String asset) {
+    if (_musicAsset == asset) return;
+    _musicAsset = asset;
+    if (!_soundEnabled || _appInBackground) return;
+    unawaited(_startMusic());
+  }
+
+  Future<void> _startMusic() async {
+    final music = _musicPlayer;
+    if (music == null || !_soundEnabled || _appInBackground) return;
+    try {
+      await music.setReleaseMode(ReleaseMode.loop);
+      await music.setVolume(.26);
+      if (_loadedMusicAsset != _musicAsset) {
+        await music.stop();
+        await music.play(AssetSource(_musicAsset));
+        _loadedMusicAsset = _musicAsset;
+      } else if (!_musicPlaying) {
+        await music.resume();
+      }
+      _musicPlaying = true;
+    } on Object {
+      // Browsers can reject autoplay before the first user gesture.
+      _musicPlaying = false;
     }
   }
 
   Future<void> _playEffect(String asset) async {
     if (!_soundEnabled || !widget.audioEnabled) return;
-    await _effectsPlayer!.stop();
-    await _effectsPlayer!.play(AssetSource(asset), mode: PlayerMode.lowLatency);
+    _effectQueue.addLast(asset);
+    if (_effectInProgress) return;
+
+    final effects = _effectsPlayer;
+    if (!_soundEnabled || effects == null) return;
+
+    _effectInProgress = true;
+    try {
+      await _effectsAudioReady;
+      while (_soundEnabled && _effectQueue.isNotEmpty) {
+        final effectAsset = _effectQueue.removeFirst();
+        await effects.stop();
+        final completed = effects.onPlayerStateChanged.firstWhere(
+          (state) =>
+              state == PlayerState.completed || state == PlayerState.stopped,
+        );
+        await effects.play(AssetSource(effectAsset));
+        await completed;
+      }
+    } finally {
+      _effectInProgress = false;
+      if (_soundEnabled && mounted) {
+        if (!_appInBackground &&
+            (!_musicPlaying || _loadedMusicAsset != _musicAsset)) {
+          await _startMusic();
+        }
+      }
+    }
   }
 
-  void _chooseAnswer(int answer) {
+  void _chooseAnswer(String answer) {
     if (_answerSelected) return;
-    final correct = answer == _target;
+    final correct = answer == _question.correctAnswer;
     setState(() {
-      _answerFeedback = correct
-          ? 'Benar! ${_collectionInstructions[_round]} $_target ${_collectionPhrases[_round]}.'
-          : '';
-      if (correct) _answerSelected = true;
+      final progress = _skillProgress.putIfAbsent(
+        _mission.id,
+        SkillProgress.new,
+      );
+      progress.recordAnswer(
+        correct: correct,
+        hintUsed: _hasUsedHint || _usedHintInMission,
+      );
+      _answerFeedback = correct ? _question.feedback : '';
+      if (correct) {
+        _answerSelected = true;
+        final finalQuestion = _questionIndex == _mission.questions.length - 1;
+        if (finalQuestion && !_mission.usesObjectCollection) {
+          _stars++;
+          _readyNext = true;
+          _showMissionComplete = true;
+        }
+      } else {
+        _wrongAttempts++;
+        _hasUsedHint = true;
+        _usedHintInMission = true;
+      }
     });
     if (correct) {
       _bounce.forward(from: 0.86).then((_) => _bounce.reverse());
@@ -326,6 +373,22 @@ class _AlveroGamePageState extends State<AlveroGamePage>
       _playEffect('audio/wrong_toot.wav');
       _showWrongAnswerDialog();
     }
+  }
+
+  void _advanceQuestion() {
+    if (!_answerSelected || _questionIndex >= _mission.questions.length - 1) {
+      return;
+    }
+    _playEffect('audio/ui_tap.wav');
+    setState(() {
+      _questionIndex++;
+      _answerSelected = false;
+      _wrongAttempts = 0;
+      _hasUsedHint = false;
+      _answerFeedback = '';
+    });
+    _refreshAnswerOptions();
+    _bounce.forward(from: 0.86).then((_) => _bounce.reverse());
   }
 
   Future<void> _showWrongAnswerDialog() => showDialog<void>(
@@ -359,12 +422,14 @@ class _AlveroGamePageState extends State<AlveroGamePage>
               style: TextStyle(
                 color: _ink,
                 fontSize: 25,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Ayo hitung lagi. Kamu pasti bisa!',
+            Text(
+              _wrongAttempts > 1
+                  ? 'Tidak apa-apa. Kita coba bersama, ya!'
+                  : 'Ayo coba lagi. Alvero bantu, ya!',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Color(0xFF658378),
@@ -372,12 +437,47 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                 fontWeight: FontWeight.w600,
               ),
             ),
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1CC),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.lightbulb_rounded,
+                    color: Color(0xFFE7A62F),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _question.hint,
+                      textAlign: TextAlign.left,
+                      style: const TextStyle(
+                        color: Color(0xFF8E642F),
+                        fontSize: 14,
+                        height: 1.3,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 22),
             SizedBox(
               width: double.infinity,
               height: 56,
               child: ElevatedButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
+                onPressed: () {
+                  _playEffect('audio/ui_tap.wav');
+                  Navigator.of(dialogContext).pop();
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _green,
                   foregroundColor: Colors.white,
@@ -419,31 +519,44 @@ class _AlveroGamePageState extends State<AlveroGamePage>
   }
 
   void _continue() {
+    _playEffect('audio/ui_tap.wav');
+    _setMusicTrack('audio/alvero_music.wav');
     _mapFloat.repeat(reverse: true);
     setState(() {
       _showMap = true;
       _showMissionIntro = false;
       _showMissionComplete = false;
-      if (_stars == _rounds.length) {
+      if (_stars == _missions.length) {
         _finished = true;
       } else {
         _round = _stars;
+        _questionIndex = 0;
         _picked = 0;
         _answerSelected = false;
         _readyNext = false;
+        _wrongAttempts = 0;
+        _hasUsedHint = false;
+        _usedHintInMission = false;
         _answerFeedback = '';
       }
     });
+    _scrollToActiveLevel();
     _refreshAnswerOptions();
   }
 
   void _restart() {
+    _playEffect('audio/ui_tap.wav');
+    _setMusicTrack('audio/alvero_music.wav');
     setState(() {
       _round = 0;
+      _questionIndex = 0;
       _picked = 0;
       _stars = 0;
       _answerSelected = false;
       _readyNext = false;
+      _wrongAttempts = 0;
+      _hasUsedHint = false;
+      _usedHintInMission = false;
       _finished = false;
       _answerFeedback = '';
       _showSplash = false;
@@ -457,8 +570,10 @@ class _AlveroGamePageState extends State<AlveroGamePage>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _bounce.dispose();
     _mapFloat.dispose();
+    _mapScrollController.dispose();
     _musicPlayer?.dispose();
     _effectsPlayer?.dispose();
     super.dispose();
@@ -617,7 +732,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
           ),
           const SizedBox(height: 12),
           const Text(
-            '5 misi seru menanti di peta Alvero',
+            '25 level seru menanti di peta Alvero',
             style: TextStyle(
               color: Color(0xFF7D998D),
               fontSize: 12,
@@ -680,7 +795,10 @@ class _AlveroGamePageState extends State<AlveroGamePage>
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [_journeyColors[_round].withValues(alpha: .22), Colors.white],
+          colors: [
+            _journeyColors[_mission.themeIndex].withValues(alpha: .22),
+            Colors.white,
+          ],
         ),
       ),
       child: SingleChildScrollView(
@@ -718,7 +836,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                         borderRadius: BorderRadius.circular(24),
                       ),
                       child: Text(
-                        'LEVEL ${_round + 1} DARI ${_rounds.length}',
+                        'LEVEL ${_round + 1} DARI ${_missions.length}',
                         style: const TextStyle(
                           color: _green,
                           fontWeight: FontWeight.w900,
@@ -733,12 +851,12 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                 _missionStage(math.min(constraints.maxWidth, 620.0), compact),
                 SizedBox(height: compact ? 9 : 14),
                 Text(
-                  _missionTitles[_round],
+                  _mission.title,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: _ink,
                     fontSize: compact ? 25 : 32,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -783,7 +901,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                       ),
                       const SizedBox(height: 7),
                       Text(
-                        _missionStories[_round],
+                        _mission.story,
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: _ink,
@@ -805,15 +923,15 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
-                              Icons.apple_rounded,
-                              color: Color(0xFFE94F48),
+                            Icon(
+                              _missionIcons[_mission.themeIndex],
+                              color: const Color(0xFFE7A62F),
                               size: 23,
                             ),
                             const SizedBox(width: 8),
                             Flexible(
                               child: Text(
-                                'Siapkan $_target ${_missionGoalItems[_round]}!',
+                                _mission.goalLine,
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: Color(0xFF8E642F),
@@ -838,10 +956,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                     icon: const Icon(Icons.play_arrow_rounded, size: 27),
                     label: const Text(
                       'AYO BANTU ALVERO!',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: .8,
-                      ),
+                      style: TextStyle(fontWeight: FontWeight.w800),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _green,
@@ -887,7 +1002,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                 height: compact ? 62 : 80,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: _journeyColors[_round],
+                    color: _journeyColors[_mission.themeIndex],
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(80),
                     ),
@@ -908,7 +1023,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                 left: constraints.maxWidth * .1,
                 bottom: compact ? 24 : 32,
                 child: Icon(
-                  _missionIcons[_round],
+                  _missionIcons[_mission.themeIndex],
                   key: const ValueKey('mission-prop'),
                   size: compact ? 66 : 88,
                   color: const Color(0xFFB87635),
@@ -927,13 +1042,9 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                     ),
                   ),
                   child: Icon(
-                    _round == 1
-                        ? Icons.cruelty_free_rounded
-                        : Icons.apple_rounded,
+                    _missionIcons[_mission.themeIndex],
                     size: compact ? 48 : 60,
-                    color: _round == 1
-                        ? const Color(0xFF8D765B)
-                        : const Color(0xFFE94F48),
+                    color: _journeyColors[_mission.themeIndex],
                   ),
                 ),
               ),
@@ -1078,13 +1189,23 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        _missionResults[_round],
+                        _mission.result,
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: _ink,
                           fontSize: compact ? 17 : 21,
                           height: 1.3,
                           fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 9),
+                      Text(
+                        _completionFeedback,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFF658378),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
@@ -1148,7 +1269,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                 height: compact ? 58 : 78,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: _journeyColors[_round],
+                    color: _journeyColors[_mission.themeIndex],
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(80),
                     ),
@@ -1186,7 +1307,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                     ),
                   ),
                   child: Icon(
-                    _resultCompanionIcons[_round],
+                    _resultCompanionIcons[_mission.themeIndex],
                     size: compact ? 58 : 76,
                     color: const Color(0xFF8F795D),
                   ),
@@ -1202,19 +1323,9 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                     child: child,
                   ),
                   child: Icon(
-                    _round == 1
-                        ? Icons.eco_rounded
-                        : _round == 2
-                        ? Icons.local_cafe_rounded
-                        : _round == 3
-                        ? Icons.apple_rounded
-                        : _round == 4
-                        ? Icons.card_giftcard_rounded
-                        : Icons.apple_rounded,
+                    _missionIcons[_mission.themeIndex],
                     size: compact ? 48 : 60,
-                    color: _round == 1
-                        ? const Color(0xFF65A856)
-                        : const Color(0xFFE94F48),
+                    color: _journeyColors[_mission.themeIndex],
                   ),
                 ),
               ),
@@ -1257,54 +1368,63 @@ class _AlveroGamePageState extends State<AlveroGamePage>
     ),
   );
 
-  Widget _mapPage(bool compact) => Column(
-    children: [
-      Text(
-        _stars == _journeyStops.length
-            ? 'PETUALANGAN SELESAI!'
-            : 'PETA PETUALANGAN',
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: _green,
-          fontSize: 17,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 1.2,
+  Widget _mapPage(bool compact) {
+    final complete = _stars >= _missions.length;
+    return Column(
+      children: [
+        Text(
+          complete ? 'PETUALANGAN SELESAI!' : 'PETA PETUALANGAN',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: _green,
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.2,
+          ),
         ),
-      ),
-      const SizedBox(height: 4),
-      Text(
-        _stars == _journeyStops.length
-            ? 'Alvero sudah mengunjungi semua tempat!'
-            : 'Ikuti jalur berliku dari Level 1 sampai 5',
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: Color(0xFF658378),
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
+        const SizedBox(height: 4),
+        Text(
+          complete
+              ? 'Alvero sudah mengunjungi semua tempat!'
+              : 'Lima tempat seru dan 25 level menantimu',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Color(0xFF658378),
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-      ),
-      const SizedBox(height: 8),
-      Expanded(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final boardHeight = math.max(constraints.maxHeight, 620.0);
-            return SingleChildScrollView(
-              child: Column(
+        const SizedBox(height: 8),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final boardHeight = math.max(
+                constraints.maxHeight,
+                (_missions.length - 1) * 105.0 + 140,
+              );
+              return Column(
                 children: [
-                  SizedBox(
-                    height: boardHeight,
-                    child: _mapBoard(compact, boardHeight),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      key: const PageStorageKey('alvero-adventure-map'),
+                      controller: _mapScrollController,
+                      reverse: true,
+                      child: SizedBox(
+                        height: boardHeight,
+                        child: _mapBoard(compact, boardHeight),
+                      ),
+                    ),
                   ),
-                  if (_stars == _journeyStops.length)
+                  if (complete)
                     Padding(
-                      padding: const EdgeInsets.only(top: 12),
+                      padding: const EdgeInsets.only(top: 8, bottom: 6),
                       child: _finishContent(),
                     )
                   else
                     Padding(
-                      padding: const EdgeInsets.only(top: 8, bottom: 12),
+                      padding: const EdgeInsets.only(top: 6, bottom: 2),
                       child: Text(
-                        'Tujuan berikutnya: ${_journeyStops[_activeStop]} · ${_stars + 1} / ${_journeyStops.length}',
+                        'Tujuan: ${_journeyStops[_activeStop]} · ${_stars + 1} / ${_missions.length}',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Color(0xFF718B7E),
@@ -1314,26 +1434,23 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                       ),
                     ),
                 ],
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 
   Widget _mapBoard(bool compact, double height) => LayoutBuilder(
     builder: (context, constraints) {
-      const stopPoints = <Offset>[
-        Offset(.2, .88),
-        Offset(.78, .68),
-        Offset(.23, .48),
-        Offset(.76, .29),
-        Offset(.5, .1),
-      ];
       final width = math.min(constraints.maxWidth, 560.0);
       final nodeWidth = math.min(width * .38, compact ? 132.0 : 150.0);
-      final nodeHeight = compact ? 92.0 : 102.0;
+      final nodeHeight = 94.0;
+      final nodePoints = List.generate(
+        _missions.length,
+        (index) => _levelMapPoint(index, _missions.length),
+      );
       return Center(
         child: ClipRRect(
           borderRadius: BorderRadius.circular(28),
@@ -1352,7 +1469,10 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                 children: [
                   Positioned.fill(
                     child: CustomPaint(
-                      painter: _WindingPathPainter(completedStops: _stars),
+                      painter: _WindingPathPainter(
+                        completedStops: _stars,
+                        levelCount: _missions.length,
+                      ),
                     ),
                   ),
                   Positioned(
@@ -1382,28 +1502,29 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                       size: 34,
                     ),
                   ),
-                  for (var index = 0; index < _journeyStops.length; index++)
+                  for (var index = 0; index < _missions.length; index++)
                     Positioned(
-                      left: width * stopPoints[index].dx - nodeWidth / 2,
-                      top: height * stopPoints[index].dy - nodeHeight / 2,
+                      left: width * nodePoints[index].dx - nodeWidth / 2,
+                      top: height * nodePoints[index].dy - nodeHeight / 2,
                       width: nodeWidth,
                       height: nodeHeight,
                       child: _mapLevelNode(index),
                     ),
-                  if (_stars < _journeyStops.length)
+                  if (_stars < _missions.length)
                     Positioned(
-                      left: _travelerLeft(
-                        width,
-                        width * stopPoints[_activeStop].dx,
-                      ),
-                      top: height * stopPoints[_activeStop].dy - 46,
-                      child: _mapTraveler(compact),
+                      left: _travelerLeft(width, width * nodePoints[_stars].dx),
+                      top: height * nodePoints[_stars].dy - 42,
+                      child: _mapTraveler(compact, missionIndex: _stars),
                     ),
-                  if (_stars == _journeyStops.length)
+                  if (_stars >= _missions.length)
                     Positioned(
-                      left: width * stopPoints.last.dx + 34,
-                      top: height * stopPoints.last.dy - 32,
-                      child: _mapTraveler(compact, celebrating: true),
+                      left: width * nodePoints.last.dx + 34,
+                      top: height * nodePoints.last.dy - 32,
+                      child: _mapTraveler(
+                        compact,
+                        celebrating: true,
+                        missionIndex: _missions.length - 1,
+                      ),
                     ),
                 ],
               ),
@@ -1421,12 +1542,12 @@ class _AlveroGamePageState extends State<AlveroGamePage>
 
   Widget _mapLevelNode(int index) {
     final completed = index < _stars;
-    final active = index == _stars && _stars < _journeyStops.length;
+    final active = index == _stars && _stars < _missions.length;
     return Semantics(
       button: active,
       enabled: active,
       label:
-          'Level ${index + 1}, ${_missionTitles[index]}, ${completed
+          'Level ${index + 1}, ${_missions[index].title}, ${completed
               ? 'selesai'
               : active
               ? 'siap dimainkan'
@@ -1477,7 +1598,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                   completed
                       ? Icons.check_rounded
                       : active
-                      ? _missionIcons[index]
+                      ? _missionIcons[_missions[index].themeIndex]
                       : Icons.lock_rounded,
                   color: completed
                       ? Colors.white
@@ -1493,11 +1614,11 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                 style: TextStyle(
                   color: active ? _green : const Color(0xFF658378),
                   fontSize: 9,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
               Text(
-                _missionTitles[index],
+                _missions[index].title,
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1517,6 +1638,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
   Widget _mapTraveler(
     bool compact, {
     bool celebrating = false,
+    required int missionIndex,
   }) => AnimatedBuilder(
     animation: _mapFloat,
     builder: (context, child) => Transform.translate(
@@ -1525,7 +1647,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
     ),
     child: Semantics(
       label:
-          'Alvero ${celebrating ? 'merayakan petualangan' : _missionActions[_activeStop]}',
+          'Alvero ${celebrating ? 'merayakan petualangan' : _missions[missionIndex].actionLabel}',
       child: SizedBox(
         width: compact ? 62 : 72,
         height: compact ? 62 : 72,
@@ -1562,7 +1684,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                 child: Icon(
                   celebrating
                       ? Icons.celebration_rounded
-                      : _missionIcons[_activeStop],
+                      : _missionIcons[_missions[missionIndex].themeIndex],
                   size: 15,
                   color: const Color(0xFFEE9C38),
                 ),
@@ -1586,9 +1708,9 @@ class _AlveroGamePageState extends State<AlveroGamePage>
 
   Widget _mobileLayout() => Column(
     children: [
-      Expanded(flex: 4, child: _alveroScene()),
-      const SizedBox(height: 12),
-      Expanded(flex: 6, child: _gameCard()),
+      Expanded(flex: 3, child: _alveroScene()),
+      const SizedBox(height: 8),
+      Expanded(flex: 7, child: _gameCard()),
     ],
   );
 
@@ -1680,7 +1802,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
           label,
           style: const TextStyle(
             color: _ink,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w800,
             fontSize: 16,
           ),
         ),
@@ -1746,7 +1868,10 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                   animation: _bounce,
                   builder: (context, child) =>
                       Transform.scale(scale: _bounce.value, child: child),
-                  child: _cat(size * .72),
+                  child: SizedBox(
+                    key: const ValueKey('mission-character'),
+                    child: _cat(size * .72),
+                  ),
                 ),
               ),
               Positioned(
@@ -1767,10 +1892,14 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(_missionIcons[_round], color: _green, size: 17),
+                        Icon(
+                          _missionIcons[_mission.themeIndex],
+                          color: _green,
+                          size: 17,
+                        ),
                         const SizedBox(width: 6),
                         Text(
-                          _missionActions[_round],
+                          _mission.actionLabel,
                           style: const TextStyle(
                             color: _ink,
                             fontSize: 11,
@@ -1889,7 +2018,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
 
   Widget _gameCard() => Container(
     width: double.infinity,
-    padding: const EdgeInsets.all(24),
+    padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 680 ? 18 : 24),
     decoration: BoxDecoration(
       color: Colors.white.withValues(alpha: .94),
       borderRadius: BorderRadius.circular(30),
@@ -1911,7 +2040,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
         children: [
           Expanded(
             child: Text(
-              'MISI ${_round + 1} · ${_missionTitles[_round].toUpperCase()}',
+              'LEVEL ${_round + 1} · ${_mission.title.toUpperCase()}',
               style: const TextStyle(
                 color: _green,
                 fontWeight: FontWeight.w900,
@@ -1921,7 +2050,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
             ),
           ),
           Text(
-            '${_round + 1} / ${_rounds.length}',
+            'SOAL ${_questionIndex + 1} / ${_mission.questions.length}',
             style: const TextStyle(
               color: Color(0xFF789189),
               fontWeight: FontWeight.w700,
@@ -1931,30 +2060,10 @@ class _AlveroGamePageState extends State<AlveroGamePage>
         ],
       ),
       const SizedBox(height: 9),
-      Wrap(
-        spacing: 8,
-        children: [
-          ChoiceChip(
-            key: const ValueKey('level-pemula'),
-            label: const Text('PEMULA'),
-            selected: _difficulty == _Difficulty.pemula,
-            onSelected: (_) => _selectDifficulty(_Difficulty.pemula),
-            visualDensity: VisualDensity.compact,
-          ),
-          ChoiceChip(
-            key: const ValueKey('level-menengah'),
-            label: const Text('MENENGAH'),
-            selected: _difficulty == _Difficulty.menengah,
-            onSelected: (_) => _selectDifficulty(_Difficulty.menengah),
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
-      ),
-      const SizedBox(height: 7),
       ClipRRect(
         borderRadius: BorderRadius.circular(9),
         child: LinearProgressIndicator(
-          value: (_round + 1) / _rounds.length,
+          value: (_questionIndex + 1) / _mission.questions.length,
           minHeight: 8,
           backgroundColor: const Color(0xFFEAF3EC),
           color: const Color(0xFFFFC83D),
@@ -1969,21 +2078,24 @@ class _AlveroGamePageState extends State<AlveroGamePage>
         ),
         child: Row(
           children: [
-            Icon(_missionIcons[_round], color: const Color(0xFFD99428)),
+            Icon(
+              _missionIcons[_mission.themeIndex],
+              color: const Color(0xFFD99428),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _missionTitles[_round],
+                    _mission.title,
                     style: const TextStyle(
                       color: _ink,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   Text(
-                    _missionDescriptions[_round],
+                    _mission.description,
                     style: const TextStyle(
                       color: Color(0xFF789189),
                       fontSize: 11,
@@ -1996,26 +2108,40 @@ class _AlveroGamePageState extends State<AlveroGamePage>
         ),
       ),
       const SizedBox(height: 8),
+      if (_question.visual.isNotEmpty)
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(
+              _question.visual,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ),
       Center(
         child: Text(
-          '${_rounds[_round].$1} + ${_rounds[_round].$2} = ${_answerSelected ? _target : '?'}',
+          _question.prompt,
           key: const ValueKey('math-question'),
-          style: const TextStyle(
+          textAlign: TextAlign.center,
+          style: TextStyle(
             color: _green,
             fontWeight: FontWeight.w900,
-            fontSize: 34,
-            letterSpacing: 1,
+            fontSize: _mission.type == LearningActivityType.addObjects
+                ? 28
+                : 25,
+            letterSpacing: .3,
           ),
         ),
       ),
       const SizedBox(height: 3),
       Center(
         child: Text(
-          _answerSelected
-              ? _picked == 0
-                    ? _answerFeedback
-                    : 'Terkumpul: $_picked / $_target ${_collectionLabels[_round]}'
-              : 'Hitung dulu, lalu pilih jawabannya!',
+          _collectingItems
+              ? 'Terkumpul: $_picked / $_target ${_mission.collectionLabel}'
+              : _answerSelected
+              ? _answerFeedback
+              : 'Soal ${_questionIndex + 1} dari ${_mission.questions.length}',
           style: const TextStyle(
             color: Color(0xFF789189),
             fontWeight: FontWeight.w700,
@@ -2027,12 +2153,14 @@ class _AlveroGamePageState extends State<AlveroGamePage>
       Expanded(
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 280),
-          child: _answerSelected
+          child: !_answerSelected
+              ? _answerChoices()
+              : _collectingItems
               ? Center(
                   key: const ValueKey('collect-mission-items'),
                   child: _collectionScene(),
                 )
-              : _answerChoices(),
+              : _correctAnswerNotice(),
         ),
       ),
       const SizedBox(height: 8),
@@ -2041,19 +2169,18 @@ class _AlveroGamePageState extends State<AlveroGamePage>
           width: double.infinity,
           height: 56,
           child: ElevatedButton.icon(
-            onPressed: _readyNext ? _continue : _collectMissionItem,
+            onPressed: _collectingItems
+                ? _collectMissionItem
+                : _advanceQuestion,
             icon: Icon(
-              _readyNext
-                  ? Icons.arrow_forward_rounded
-                  : _collectionDestinationIcons[_round],
+              _collectingItems
+                  ? _collectionDestinationIcons[_mission.themeIndex]
+                  : Icons.arrow_forward_rounded,
               size: 23,
             ),
             label: Text(
-              _readyNext ? 'KEMBALI KE PETA' : _collectionButtonLabels[_round],
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                letterSpacing: .7,
-              ),
+              _collectingItems ? _mission.collectionButtonLabel : 'LANJUT SOAL',
+              style: const TextStyle(fontWeight: FontWeight.w800),
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: _green,
@@ -2071,7 +2198,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
           height: 56,
           child: Center(
             child: Text(
-              'Pilih jawaban yang tepat untuk mulai!',
+              'Pilih jawaban yang tepat untuk membantu Alvero!',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: const Color(0xFFD67A55),
@@ -2081,20 +2208,43 @@ class _AlveroGamePageState extends State<AlveroGamePage>
             ),
           ),
         ),
-      if (_readyNext) ...[
-        const SizedBox(height: 5),
-        const Center(
-          child: Text(
-            'Misi selesai! Kamu hebat! Bintangnya bertambah.',
-            style: TextStyle(
-              color: Color(0xFF84998D),
-              fontWeight: FontWeight.w600,
-              fontSize: 11,
+    ],
+  );
+
+  Widget _correctAnswerNotice() => Center(
+    key: const ValueKey('question-correct-feedback'),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF8EC),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.check_circle_rounded, color: _green, size: 50),
+          const SizedBox(height: 8),
+          Text(
+            _answerFeedback,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: _ink,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
             ),
           ),
-        ),
-      ],
-    ],
+          const SizedBox(height: 6),
+          Text(
+            'Soal ${_questionIndex + 1} dari ${_mission.questions.length} selesai',
+            style: const TextStyle(
+              color: Color(0xFF658378),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    ),
   );
 
   Widget _answerChoices() => Center(
@@ -2119,16 +2269,18 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '$answer',
-                    style: const TextStyle(
-                      fontSize: 23,
+                    answer,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: answer.length > 5 ? 15 : 23,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  Text(
-                    _collectionLabels[_round],
-                    style: const TextStyle(fontSize: 10),
-                  ),
+                  if (_mission.usesObjectCollection)
+                    Text(
+                      _mission.collectionLabel,
+                      style: const TextStyle(fontSize: 10),
+                    ),
                 ],
               ),
             ),
@@ -2138,11 +2290,10 @@ class _AlveroGamePageState extends State<AlveroGamePage>
     ),
   );
 
-  String _collectionEmoji(int index) => switch (_round) {
-    1 => '🥕',
-    3 => ['🍎', '🍊', '🍐', '🍇'][index % 4],
-    4 => ['🎈', '🎁', '🎉', '⭐'][index % 4],
-    _ => '🍎',
+  String _collectionEmoji(int index) => switch (_mission.themeIndex) {
+    3 => '🥕',
+    4 => ['🍎', '🍊', '🍐', '🍇'][index % 4],
+    _ => _mission.collectionEmoji,
   };
 
   Widget _collectionScene() => AnimatedBuilder(
@@ -2170,8 +2321,8 @@ class _AlveroGamePageState extends State<AlveroGamePage>
               (i) => Semantics(
                 key: ValueKey('collection-item-$i'),
                 label: i < _picked
-                    ? '${_collectionLabels[_round]} sudah digunakan'
-                    : '$_collectionItemsPrompt ${i + 1}',
+                    ? '${_mission.collectionLabel} sudah digunakan'
+                    : '${_mission.collectionPrompt} ${i + 1}',
                 button: i == _picked && !_readyNext,
                 child: GestureDetector(
                   onTap: i == _picked && !_readyNext
@@ -2180,7 +2331,7 @@ class _AlveroGamePageState extends State<AlveroGamePage>
                   child: AnimatedOpacity(
                     opacity: i < _picked ? 1 : .5,
                     duration: const Duration(milliseconds: 250),
-                    child: _round == 0 || _round == 2
+                    child: _mission.themeIndex == 4
                         ? CustomPaint(
                             size: Size(
                               MediaQuery.sizeOf(context).width < 680 ? 28 : 34,
@@ -2206,13 +2357,13 @@ class _AlveroGamePageState extends State<AlveroGamePage>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                _collectionDestinationIcons[_round],
+                _collectionDestinationIcons[_mission.themeIndex],
                 color: const Color(0xFFB87635),
                 size: 19,
               ),
               const SizedBox(width: 7),
               Text(
-                _collectionDestinationLabels[_round],
+                _mission.destinationLabel,
                 style: const TextStyle(
                   color: Color(0xFF8E642F),
                   fontSize: 10,
@@ -2309,26 +2460,32 @@ class _AlveroGamePageState extends State<AlveroGamePage>
   );
 }
 
+Offset _levelMapPoint(int index, int count) {
+  const xPositions = [.2, .77, .24, .78, .47];
+  final progress = count <= 1 ? 0.0 : index / (count - 1);
+  return Offset(xPositions[index % xPositions.length], .95 - .9 * progress);
+}
+
 class _WindingPathPainter extends CustomPainter {
-  const _WindingPathPainter({required this.completedStops});
+  const _WindingPathPainter({
+    required this.completedStops,
+    required this.levelCount,
+  });
 
   final int completedStops;
-
-  static const _points = <Offset>[
-    Offset(.2, .88),
-    Offset(.78, .68),
-    Offset(.23, .48),
-    Offset(.76, .29),
-    Offset(.5, .1),
-  ];
+  final int levelCount;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final points = List.generate(
+      levelCount,
+      (index) => _levelMapPoint(index, levelCount),
+    );
     final route = Path()
-      ..moveTo(size.width * _points.first.dx, size.height * _points.first.dy);
-    for (var i = 0; i < _points.length - 1; i++) {
-      final from = _points[i];
-      final to = _points[i + 1];
+      ..moveTo(size.width * points.first.dx, size.height * points.first.dy);
+    for (var i = 0; i < points.length - 1; i++) {
+      final from = points[i];
+      final to = points[i + 1];
       route.cubicTo(
         size.width * from.dx,
         size.height * (from.dy + to.dy) / 2,
@@ -2363,7 +2520,8 @@ class _WindingPathPainter extends CustomPainter {
       canvas.drawPath(
         metrics.extractPath(
           0,
-          metrics.length * (completedStops / (_points.length - 1)),
+          metrics.length *
+              (completedStops.clamp(0, levelCount - 1) / (levelCount - 1)),
         ),
         traveled,
       );
@@ -2372,7 +2530,8 @@ class _WindingPathPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _WindingPathPainter oldDelegate) =>
-      completedStops != oldDelegate.completedStops;
+      completedStops != oldDelegate.completedStops ||
+      levelCount != oldDelegate.levelCount;
 }
 
 class _TriangleClipper extends CustomClipper<Path> {
